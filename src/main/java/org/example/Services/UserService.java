@@ -63,65 +63,39 @@ public class UserService {
             for (int i = 1; i <= questionNumber; i++) {
                 System.out.println("Your question number " + i + " is?");
                 String text = scanner.nextLine();
-                Option option1 = new Option();
-                Option option2 = new Option();
-                Option option3 = new Option();
-                Option option4 = new Option();
 
                 preparedStatement2.setInt(1, survey1.getId());
                 preparedStatement2.setString(2, text);
+                preparedStatement2.executeUpdate();
 
-
-                System.out.println("Your first option:");
-                String option1Text = scanner.nextLine();
                 int question_id = 0;
                 while(rsQuestion.next()) {
                     if(rsQuestion.isLast()){
                         question_id = rsQuestion.getInt("question_id");
                     }
                 }
-                preparedStatement3.setInt(1, question_id);
-                preparedStatement3.setString(2, option1Text);
-                while(rsOption.next()) {
-                    if(rsOption.isLast()) {
-                        option1 = new Option(option1Text, question_id, rsOption.getInt("option_id"));
-                    }
-                }
-                System.out.println("Your second option:");
-                String option2Text = scanner.nextLine();
-                preparedStatement3.setInt(1, question_id);
-                preparedStatement3.setString(2, option2Text);
-                while(rsOption.next()) {
-                    if(rsOption.isLast()) {
-                        option2 = new Option(option2Text, question_id, rsOption.getInt("option_id"));
-                    }
-                }
-
-                System.out.println("Your third option:");
-                String option3Text = scanner.nextLine();
-                preparedStatement3.setInt(1, question_id);
-                preparedStatement3.setString(2, option3Text);
-                while(rsOption.next()) {
-                    if(rsOption.isLast()) {
-                        option3 = new Option(option3Text, question.getQuestionId(), rsOption.getInt("option_id"));
-                    }
-                }
-
-                System.out.println("Your fourth option:");
-                String option4Text = scanner.nextLine();
-                preparedStatement3.setInt(1, question_id);
-                preparedStatement3.setString(2, option4Text);
-                while(rsOption.next()) {
-                    if(rsOption.isLast()) {
-                        option4 = new Option(option4Text, question_id, rsOption.getInt("option_id"));
-                    }
-                }
-
                 while(rsQuestion.next()) {
                     if (rsQuestion.isLast()) {
                         question = new Question(survey1.getId(), text, rsQuestion.getInt("question_id"));
                     }
                 }
+
+                for(int j = 1; j <= 4; j++){
+                    System.out.println("Your option number " + j + ":");
+                    String optionText = scanner.nextLine();
+
+                    preparedStatement3.setInt(1, question_id);
+                    preparedStatement3.setString(2, optionText);
+                    preparedStatement3.addBatch();
+                    while(rsOption.next()) {
+                        if(rsOption.isLast()) {
+                            Option option = new Option(optionText, question_id, rsOption.getInt("option_id"));
+                            question.addOption(option);
+                        }
+                    }
+                }
+                preparedStatement3.executeBatch();
+
                 preparedStatement2.setInt(1, survey1.getId());
                 preparedStatement2.setString(2, text);
 
@@ -170,40 +144,71 @@ public class UserService {
         ResultSet rs = null;
         ArrayList<Survey> surveysTable = new ArrayList<Survey>();
         try {
-
             Class.forName("org.postgresql.Driver");
             con = DriverManager.getConnection(conString, "postgres", "0000");
             statement = con.createStatement();
             rs = statement.executeQuery("SELECT survey_id, title, description, user_id FROM surveys ORDER BY survey_id");
-            while(rs.next()) {
+
+            PreparedStatement ps = con.prepareStatement("SELECT count(*) FROM questions WHERE survey_id = ?");
+
+            while (rs.next()) {
                 int survey_id = rs.getInt("survey_id");
                 String title = rs.getString("title");
                 String description = rs.getString("description");
                 int userId = rs.getInt("user_id");
                 Survey survey = new Survey(userId, title, description, survey_id);
+                PreparedStatement preparedStatement2 = con.prepareStatement("SELECT question_id, survey_id, question_text FROM questions WHERE survey_id = ?");
+                preparedStatement2.setInt(1, survey_id);
+                ResultSet questionsRs = preparedStatement2.executeQuery();
+                while(questionsRs.next()) {
+                    int question_id = questionsRs.getInt("question_id");
+                    int question_survey_id = questionsRs.getInt("survey_id");
+                    String question_text = questionsRs.getString("question_text");
+                    PreparedStatement preparedStatement3 = con.prepareStatement("SELECT question_id, option_id, option_text FROM options WHERE question_id = ?");
+                    preparedStatement3.setInt(1, question_id);
+                    ResultSet optionRs = preparedStatement3.executeQuery();
+
+                    Question question = new Question();
+
+                    while(optionRs.next()) {
+                        int option_question_id = optionRs.getInt("question_id");
+                        int option_id = optionRs.getInt("option_id");
+                        String option_text = optionRs.getString("option_text");
+
+                        Option option = new Option(option_text, option_question_id, option_id);
+                        question.addOption(option);
+                    }
+                    question = new Question(question_survey_id, question_text, question_id);
+
+                    survey.addQuestion(question);
+                }
                 surveysTable.add(survey);
             }
-            for(Survey survey: surveysTable) {
+
+            for (Survey survey : surveysTable) {
                 System.out.println(survey);
+                System.out.println(survey.getQuestions());
             }
 
             PreparedStatement preparedStatement = con.prepareStatement("INSERT INTO responses (response_id, survey_id, question_id, user_id, answer) VALUES (?, ?, ?, ?, ?)");
             System.out.println("Which survey you want to answer? (Enter survey_id) ");
             int selectedSurveyId = scanner.nextInt();
+
             ArrayList<Response> responsesList = new ArrayList<Response>();
-            for(Survey survey: surveysTable){
-                if(survey.getId() == selectedSurveyId) {
+            for (Survey survey : surveysTable) {
+                if (survey.getId() == selectedSurveyId) {
                     System.out.println(survey.getTitle());
-                    int questionNum = survey.getQuestions().size();
-                    for(Question question : survey.getQuestions()) {
+                    ps.setInt(1, selectedSurveyId);
+                    ResultSet resultSet = ps.executeQuery();
+                    for (Question question : survey.getQuestions()) {
                         System.out.println(question.getText());
                         System.out.println("1. " + question.getOptions().get(1).getText());
-                        System.out.println("1. " + question.getOptions().get(2).getText());
-                        System.out.println("1. " + question.getOptions().get(3).getText());
-                        System.out.println("1. " + question.getOptions().get(4).getText());
+                        System.out.println("2. " + question.getOptions().get(2).getText());
+                        System.out.println("3. " + question.getOptions().get(3).getText());
+                        System.out.println("4. " + question.getOptions().get(4).getText());
                         System.out.print("Your answer:");
                         int answer = scanner.nextInt();
-                        Response response = new Response(survey.getId(), question.getQuestionId(), user_id, answer);
+                        Response response = new Response(selectedSurveyId, question.getQuestionId(), user_id, answer);
                         responsesList.add(response);
                         preparedStatement.setInt(1, response.getResponse_id());
                         preparedStatement.setInt(2, response.getSurvey_id());
@@ -213,7 +218,6 @@ public class UserService {
                     }
                 }
             }
-
 
         }
         catch (SQLException e) {

@@ -36,7 +36,6 @@ public class UserService {
             System.out.println("Enter survey description:");
             String description = scanner.nextLine();
 
-
             preparedStatement.setString(1, title);
             preparedStatement.setString(2, description);
 

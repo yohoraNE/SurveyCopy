@@ -111,7 +111,6 @@ public class UserService {
                 System.out.println("Failed to create Survey.");
             }
 
-
         }
         catch(SQLException e){
             System.out.println("connection server: " + e.getMessage());
